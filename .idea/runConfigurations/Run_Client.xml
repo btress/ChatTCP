@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="2. Run Client (Launcher)" type="Application" factoryName="Application" singleton="false">
+    <option name="MAIN_CLASS_NAME" value="org.example.ungdungchat.Launcher" />
+    <module name="ungdungchat" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

@@ -1,231 +1,277 @@
 package org.example.ungdungchat;
 
+import com.google.gson.Gson;
+import org.example.ungdungchat.server.ClientSession;
+import org.example.ungdungchat.server.PacketRouter;
+import org.example.ungdungchat.server.SessionManager;
+import org.example.ungdungchat.server.db.UserRepository;
+import org.example.ungdungchat.shared.model.Message;
+import org.example.ungdungchat.shared.model.User;
+import org.example.ungdungchat.shared.protocol.*;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
-
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class TCPServer {
+    private static final Logger LOGGER = Logger.getLogger(TCPServer.class.getName());
+    private static final Gson GSON = JsonUtils.GSON;
 
-    private final List<ClientHandler> clients = new ArrayList<>();
+    public static final int PORT = 8888;
+    private volatile ExecutorService threadPool = Executors.newCachedThreadPool();
+    private final SessionManager sessionManager = SessionManager.getInstance();
+    private final UserRepository userRepo = new UserRepository();
+    private final PacketRouter router = new PacketRouter(userRepo);
+
+    private final File storageDir = new File("server_storage/files");
+    private final Map<String, FileOutputStream> openUploads = new ConcurrentHashMap<>();
+    private volatile boolean running;
+    private volatile ServerSocket serverSocket;
+
+    public TCPServer() {
+        if (!storageDir.exists()) {
+            storageDir.mkdirs();
+        }
+    }
 
     public void run() {
         try {
-            ServerSocket ss = new ServerSocket(Protocol.PORT);
-            System.out.println("=== Server Started - port " + Protocol.PORT + " ===");
-            System.out.println("Gõ /users để xem danh sách, /quit để tắt server.");
-
-            Thread consoleThread = new Thread(this::doConsole);
-            consoleThread.setDaemon(true);
-            consoleThread.start();
-
-            while (true) {
-                Socket socket = ss.accept();
-                new ClientHandler(socket).start();
+            start();
+            while (running) {
+                Thread.sleep(250);
             }
-
         } catch (IOException e) {
-            System.out.println("Lỗi server: " + e);
+            LOGGER.log(Level.SEVERE, "Lỗi server socket: " + e.getMessage(), e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            shutdown();
         }
     }
 
-    private void doConsole() {
-        Scanner sc = new Scanner(System.in);
-        while (sc.hasNextLine()) {
-            String cmd = sc.nextLine().trim();
-            if (cmd.equalsIgnoreCase("/quit")) {
-                System.out.println("Server đang tắt...");
-                System.exit(0);
-            } else if (cmd.equalsIgnoreCase("/users")) {
-                System.out.println("Đang online: " + getUserNames());
-            } else if (!cmd.isEmpty()) {
-                broadcastSystem("[Server] " + cmd);
+    public synchronized void start() throws IOException {
+        if (running) {
+            throw new IllegalStateException("Server đang chạy.");
+        }
+        if (threadPool.isShutdown()) {
+            threadPool = Executors.newCachedThreadPool();
+        }
+
+        ServerSocket listener = new ServerSocket(PORT);
+        serverSocket = listener;
+        running = true;
+        LOGGER.info("TCP server started on port " + PORT);
+
+        Thread acceptThread = new Thread(() -> acceptConnections(listener), "server-accept");
+        acceptThread.setDaemon(true);
+        acceptThread.start();
+    }
+
+    private void acceptConnections(ServerSocket listener) {
+        try {
+            while (running) {
+                Socket socket = listener.accept();
+                threadPool.execute(() -> handleClientSocket(socket));
+            }
+        } catch (IOException e) {
+            if (running) {
+                LOGGER.log(Level.SEVERE, "Lỗi server socket: " + e.getMessage(), e);
             }
         }
     }
 
-    // ------------------------------------------------------------------
-    //  Các hàm broadcast
-    // ------------------------------------------------------------------
-
-    private synchronized List<String> getUserNames() {
-        List<String> names = new ArrayList<>();
-        for (ClientHandler c : clients) names.add(c.name);
-        return names;
+    public boolean isRunning() {
+        return running && serverSocket != null && !serverSocket.isClosed();
     }
 
-    private synchronized List<ClientHandler> snapshot() {
-        return new ArrayList<>(clients);
+    public SessionManager getSessionManager() {
+        return sessionManager;
     }
 
-    private void broadcastMessage(String sender, String content) {
-        for (ClientHandler c : snapshot()) c.sendMessage(sender, content);
-        System.out.println(sender + ": " + content);
-    }
-
-    private void broadcastSystem(String content) {
-        for (ClientHandler c : snapshot()) c.sendSystem(content);
-        System.out.println("[SYS] " + content);
-    }
-
-    /** Gửi file cho tất cả, trừ người gửi */
-    private void broadcastFile(ClientHandler from, String fileName, byte[] data) {
-        for (ClientHandler c : snapshot()) {
-            if (c != from) c.sendFile(from.name, fileName, data);
+    public boolean broadcastNotice(String message) {
+        if (message == null || message.isBlank() || !isRunning()) {
+            return false;
         }
-        System.out.println(from.name + " gửi file: " + fileName
-                + " (" + Protocol.formatSize(data.length) + ")");
+        Packet packet = Packet.create(EventType.SERVER_NOTICE)
+                .withPayload(Map.of("message", "[THÔNG BÁO HỆ THỐNG] " + message.trim()));
+        sessionManager.broadcastToAll(packet);
+        LOGGER.info("Broadcast sent.");
+        return true;
     }
 
-    private void broadcastUserList() {
-        List<String> names = getUserNames();
-        for (ClientHandler c : snapshot()) c.sendUsers(names);
-    }
-
-    /** Nếu tên bị trùng thì thêm số vào sau: Nam, Nam(2), Nam(3)... */
-    private synchronized String makeUniqueName(String raw) {
-        String base = (raw == null || raw.trim().isEmpty()) ? "User" : raw.trim();
-        String name = base;
-        int i = 2;
-        boolean trung = true;
-        while (trung) {
-            trung = false;
-            for (ClientHandler c : clients) {
-                if (c.name != null && c.name.equalsIgnoreCase(name)) { trung = true; break; }
-            }
-            if (trung) name = base + "(" + (i++) + ")";
+    public boolean kickUserByUsername(String username) {
+        User user = userRepo.findByUsername(username);
+        if (user == null) {
+            return false;
         }
-        return name;
+        sessionManager.kickUser(user.getId(), "Bị kick bởi quản trị viên");
+        LOGGER.info("Kicked user: " + username);
+        return true;
     }
 
-    // ------------------------------------------------------------------
-    //  Mỗi client 1 thread
-    // ------------------------------------------------------------------
-    private class ClientHandler extends Thread {
-
-        private final Socket socket;
-        private DataInputStream is;
-        private DataOutputStream os;
-        private String name;
-
-        ClientHandler(Socket socket) {
-            this.socket = socket;
+    public boolean setUserBanned(String username, boolean banned) {
+        User user = userRepo.findByUsername(username);
+        if (user == null) {
+            return false;
         }
+        userRepo.setBanned(user.getId(), banned);
+        if (banned) {
+            sessionManager.kickUser(user.getId(), "Tài khoản bị cấm bởi quản trị viên");
+        }
+        LOGGER.info((banned ? "Banned" : "Unbanned") + " user: " + username);
+        return true;
+    }
 
-        @Override
-        public void run() {
-            try {
-                is = new DataInputStream(socket.getInputStream());
-                os = new DataOutputStream(socket.getOutputStream());
+    private void handleClientSocket(Socket socket) {
+        ClientSession session = null;
+        try {
+            session = new ClientSession(socket);
+            sessionManager.addSession(session);
+            LOGGER.info("New connection from: " + session.getRemoteAddress());
 
-                // Gói tin đầu tiên bắt buộc là JOIN + tên
-                String type = is.readUTF();
-                if (!Protocol.JOIN.equals(type)) {
-                    socket.close();
-                    return;
+            while (session.isConnected() && running) {
+                Frame frame = ProtocolUtils.readFrame(session.getInputStream());
+                if (frame == null) {
+                    break; // Client closed connection
                 }
-                name = makeUniqueName(is.readUTF());
 
-                synchronized (TCPServer.this) { clients.add(this); }
-                sendSystem("Bạn đã vào phòng với tên: " + name);
-                broadcastSystem(name + " đã tham gia phòng chat.");
-                broadcastUserList();
+                switch (frame.getType()) {
+                    case Frame.TYPE_JSON -> {
+                        Packet packet = ProtocolUtils.parsePacket(frame);
+                        router.route(session, packet);
+                    }
+                    case Frame.TYPE_FILE_CHUNK -> {
+                        handleFileChunk(session, frame.getPayload());
+                    }
+                    case Frame.TYPE_AUDIO_DATA -> {
+                        handleAudioRelay(session, frame.getPayload());
+                    }
+                    case Frame.TYPE_HEARTBEAT_PING -> {
+                        session.sendFrame(Frame.TYPE_HEARTBEAT_PONG, new byte[0]);
+                    }
+                    case Frame.TYPE_HEARTBEAT_PONG -> {
+                        session.setLastPing(java.time.Instant.now());
+                    }
+                    default -> LOGGER.warning("Unknown frame type: " + frame.getType());
+                }
+            }
+        } catch (IOException e) {
+            // Disconnection
+        } finally {
+            if (session != null) {
+                cleanUpSession(session);
+            }
+        }
+    }
 
-                // Vòng lặp nhận dữ liệu
-                while (true) {
-                    String t = is.readUTF();
+    private void handleFileChunk(ClientSession session, byte[] payload) {
+        try {
+            String jsonChunk = new String(payload, java.nio.charset.StandardCharsets.UTF_8);
+            FileChunk chunk = GSON.fromJson(jsonChunk, FileChunk.class);
+            if (chunk == null) return;
 
-                    if (Protocol.MSG.equals(t)) {
-                        String tinnhan = is.readUTF();
-                        broadcastMessage(name, tinnhan);
+            File targetFile = new File(storageDir, chunk.getFileId() + "_" + chunk.getFileName());
+            FileOutputStream fos = openUploads.computeIfAbsent(chunk.getFileId(), k -> {
+                try {
+                    return new FileOutputStream(targetFile, true);
+                } catch (IOException e) {
+                    LOGGER.severe("Cannot open file stream for upload: " + e.getMessage());
+                    return null;
+                }
+            });
 
-                    } else if (Protocol.FILE.equals(t)) {
-                        String fileName = is.readUTF();
-                        int len = is.readInt();
-                        if (len < 0 || len > Protocol.MAX_FILE_SIZE) {
-                            throw new IOException("Kích thước file không hợp lệ: " + len);
-                        }
-                        byte[] data = new byte[len];
-                        is.readFully(data);          // đọc đủ số byte mới thôi
-                        broadcastFile(this, fileName, data);
+            if (fos != null && chunk.getData() != null) {
+                fos.write(chunk.getData());
+                fos.flush();
 
-                    } else {
-                        System.out.println("Gói tin lạ: " + t);
+                if (chunk.getChunkIndex() + 1 >= chunk.getTotalChunks()) {
+                    fos.close();
+                    openUploads.remove(chunk.getFileId());
+                    LOGGER.info("File upload complete: " + chunk.getFileName() + " (" + chunk.getTotalSize() + " bytes)");
+
+                    // Broadcast file message
+                    Message msg = new Message(chunk.getConversationId(), session.getUserId(), session.getDisplayName(), chunk.getFileName());
+                    boolean isImg = isImageExtension(chunk.getFileName());
+                    msg.setMessageType(isImg ? Message.TYPE_IMAGE : Message.TYPE_FILE);
+                    msg.setAttachmentName(chunk.getFileName());
+                    msg.setAttachmentSize(chunk.getTotalSize());
+                    msg.setAttachmentUrl(targetFile.getAbsolutePath());
+
+                    Packet msgPacket = Packet.create(EventType.MESSAGE_SEND).withPayload(msg);
+                    router.route(session, msgPacket);
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error processing file chunk: " + e.getMessage());
+        }
+    }
+
+    private boolean isImageExtension(String name) {
+        if (name == null) return false;
+        String lower = name.toLowerCase();
+        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".gif") || lower.endsWith(".webp");
+    }
+
+    private void handleAudioRelay(ClientSession session, byte[] payload) {
+        // Voice Call Audio Relay: forwards audio data to other participants
+        // First 36 bytes can be target userId (or callId), rest is raw PCM audio
+        if (payload == null || payload.length <= 36) return;
+        String targetUserId = new String(payload, 0, 36, java.nio.charset.StandardCharsets.UTF_8).trim();
+        byte[] audioBytes = Arrays.copyOfRange(payload, 36, payload.length);
+
+        for (ClientSession target : sessionManager.getSessionsForUser(targetUserId)) {
+            target.sendFrame(Frame.TYPE_AUDIO_DATA, audioBytes);
+        }
+    }
+
+    private void cleanUpSession(ClientSession session) {
+        session.close();
+        sessionManager.removeSession(session);
+        if (session.getUserId() != null) {
+            userRepo.updateStatus(session.getUserId(), "OFFLINE");
+            Packet offline = Packet.create(EventType.USER_OFFLINE)
+                    .withPayload(Map.of("userId", session.getUserId(), "lastSeen", java.time.Instant.now().toString()));
+            sessionManager.broadcastToAll(offline);
+            LOGGER.info("User logged out/disconnected: " + session.getUsername());
+        }
+    }
+
+    public void shutdown() {
+        synchronized (this) {
+            boolean wasRunning = running;
+            running = false;
+            ServerSocket listener = serverSocket;
+            serverSocket = null;
+            if (listener != null && !listener.isClosed()) {
+                try {
+                    listener.close();
+                } catch (IOException e) {
+                    LOGGER.log(Level.WARNING, "Could not close server socket.", e);
+                }
+            }
+
+            if (wasRunning) {
+                for (ClientSession session : sessionManager.getAllActiveSessions()) {
+                    session.close();
+                    sessionManager.removeSession(session);
+                    if (session.getUserId() != null) {
+                        userRepo.updateStatus(session.getUserId(), "OFFLINE");
                     }
                 }
-
-            } catch (IOException e) {
-                // client ngắt kết nối -> kết thúc thread
-            } finally {
-                close();
             }
-        }
-
-        // Mọi hàm gửi đều đồng bộ trên os để 2 thread không ghi chồng nhau
-        void sendMessage(String sender, String content) {
-            try {
-                synchronized (os) {
-                    os.writeUTF(Protocol.MSG);
-                    os.writeUTF(sender);
-                    os.writeUTF(content);
-                    os.flush();
-                }
-            } catch (IOException e) { close(); }
-        }
-
-        void sendSystem(String content) {
-            try {
-                synchronized (os) {
-                    os.writeUTF(Protocol.SYS);
-                    os.writeUTF(content);
-                    os.flush();
-                }
-            } catch (IOException e) { close(); }
-        }
-
-        void sendFile(String sender, String fileName, byte[] data) {
-            try {
-                synchronized (os) {
-                    os.writeUTF(Protocol.FILE);
-                    os.writeUTF(sender);
-                    os.writeUTF(fileName);
-                    os.writeInt(data.length);
-                    os.write(data);
-                    os.flush();
-                }
-            } catch (IOException e) { close(); }
-        }
-
-        void sendUsers(List<String> names) {
-            try {
-                synchronized (os) {
-                    os.writeUTF(Protocol.USERS);
-                    os.writeInt(names.size());
-                    for (String n : names) os.writeUTF(n);
-                    os.flush();
-                }
-            } catch (IOException e) { close(); }
-        }
-
-        private void close() {
-            boolean removed;
-            synchronized (TCPServer.this) { removed = clients.remove(this); }
-            try { socket.close(); } catch (IOException ignored) { }
-            if (removed && name != null) {
-                broadcastSystem(name + " đã rời phòng chat.");
-                broadcastUserList();
-            }
+            threadPool.shutdownNow();
+            LOGGER.info("TCP server stopped.");
         }
     }
 
     public static void main(String[] args) {
-        TCPServer s = new TCPServer();
-        s.run();
+        TCPServer server = new TCPServer();
+        server.run();
     }
 }

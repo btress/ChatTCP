@@ -1,46 +1,108 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.geometry.Insets?>
-<?import javafx.scene.control.Button?>
-<?import javafx.scene.control.Label?>
-<?import javafx.scene.control.Separator?>
-<?import javafx.scene.control.TextField?>
-<?import javafx.scene.layout.StackPane?>
-<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
 
-<StackPane xmlns="http://javafx.com/javafx"
-           xmlns:fx="http://javafx.com/fxml"
+<StackPane xmlns="http://javafx.com/javafx/21"
+           xmlns:fx="http://javafx.com/fxml/1"
            fx:controller="org.example.ungdungchat.HelloController"
-           prefWidth="520" prefHeight="620"
+           prefWidth="560" prefHeight="680"
            stylesheets="@style.css"
-           styleClass="nen-chinh">
+           styleClass="nen-auth">
 
-    <VBox spacing="10" maxWidth="340" maxHeight="-Infinity" styleClass="the-trang">
+    <VBox spacing="16" maxWidth="420" maxHeight="-Infinity" styleClass="card-auth">
         <padding>
-            <Insets top="30" right="30" bottom="30" left="30"/>
+            <Insets top="32" right="36" bottom="32" left="36"/>
         </padding>
 
-        <Label text="CHAT APP" styleClass="tieu-de-lon"/>
-        <Label text="Kết nối tới server để bắt đầu trò chuyện" styleClass="phu-de"/>
-        <Separator/>
+        <!-- Logo & Brand Header -->
+        <VBox alignment="CENTER" spacing="6">
+            <Label text="⚡ MESSENGER" styleClass="brand-logo"/>
+            <Label text="Trải nghiệm nhắn tin TCP &amp; MongoDB hiện đại" styleClass="brand-subtitle"/>
+        </VBox>
 
-        <Label text="Tên của bạn" styleClass="nhan"/>
-        <TextField fx:id="txtTen" promptText="Nhập tên hiển thị"
-                   onAction="#onKetNoi" styleClass="o-nhap"/>
+        <!-- Segmented Tab for Login / Register -->
+        <HBox spacing="4" styleClass="tab-segment">
+            <Button fx:id="btnTabLogin" text="Đăng nhập" onAction="#onSwitchToLogin"
+                    maxWidth="Infinity" HBox.hgrow="ALWAYS" styleClass="tab-segment-btn, tab-active"/>
+            <Button fx:id="btnTabRegister" text="Đăng ký" onAction="#onSwitchToRegister"
+                    maxWidth="Infinity" HBox.hgrow="ALWAYS" styleClass="tab-segment-btn"/>
+        </HBox>
 
-        <Label text="Địa chỉ server" styleClass="nhan"/>
-        <TextField fx:id="txtHost" text="localhost" styleClass="o-nhap"/>
+        <!-- Form Container -->
+        <StackPane>
+            <!-- LOGIN FORM -->
+            <VBox fx:id="formLogin" spacing="12">
+                <VBox spacing="4">
+                    <Label text="Tên đăng nhập hoặc Email" styleClass="label-field"/>
+                    <TextField fx:id="txtLoginIdentifier" promptText="nhập username hoặc email..."
+                               onAction="#onLogin" styleClass="input-field"/>
+                </VBox>
 
-        <Label text="Port" styleClass="nhan"/>
-        <TextField fx:id="txtPort" text="8888" styleClass="o-nhap"/>
+                <VBox spacing="4">
+                    <Label text="Mật khẩu" styleClass="label-field"/>
+                    <PasswordField fx:id="txtLoginPassword" promptText="••••••••"
+                                   onAction="#onLogin" styleClass="input-field"/>
+                </VBox>
 
-        <Button fx:id="btnKetNoi" text="Kết nối" onAction="#onKetNoi"
-                maxWidth="Infinity" prefHeight="40" styleClass="nut-chinh">
-            <VBox.margin>
-                <Insets top="8"/>
-            </VBox.margin>
-        </Button>
+                <HBox spacing="12">
+                    <VBox spacing="4" HBox.hgrow="ALWAYS">
+                        <Label text="Máy chủ" styleClass="label-field"/>
+                        <TextField fx:id="txtHost" text="localhost" styleClass="input-field"/>
+                    </VBox>
+                    <VBox spacing="4" prefWidth="110">
+                        <Label text="Cổng" styleClass="label-field"/>
+                        <TextField fx:id="txtPort" text="8888" styleClass="input-field"/>
+                    </VBox>
+                </HBox>
 
-        <Label fx:id="lblLoi" wrapText="true" styleClass="loi"/>
+                <Button fx:id="btnLogin" text="Đăng nhập" onAction="#onLogin"
+                        maxWidth="Infinity" prefHeight="42" styleClass="btn-primary">
+                    <VBox.margin>
+                        <Insets top="10"/>
+                    </VBox.margin>
+                </Button>
+            </VBox>
+
+            <!-- REGISTER FORM -->
+            <VBox fx:id="formRegister" spacing="10" visible="false">
+                <VBox spacing="4">
+                    <Label text="Tên đăng nhập (Username)" styleClass="label-field"/>
+                    <TextField fx:id="txtRegUsername" promptText="viết liền không dấu..." styleClass="input-field"/>
+                </VBox>
+
+                <VBox spacing="4">
+                    <Label text="Tên hiển thị (Display Name)" styleClass="label-field"/>
+                    <TextField fx:id="txtRegDisplayName" promptText="tên bạn muốn hiển thị..." styleClass="input-field"/>
+                </VBox>
+
+                <VBox spacing="4">
+                    <Label text="Email" styleClass="label-field"/>
+                    <TextField fx:id="txtRegEmail" promptText="example@gmail.com..." styleClass="input-field"/>
+                </VBox>
+
+                <VBox spacing="4">
+                    <Label text="Mật khẩu" styleClass="label-field"/>
+                    <PasswordField fx:id="txtRegPassword" promptText="tối thiểu 6 ký tự..." styleClass="input-field"/>
+                </VBox>
+
+                <VBox spacing="4">
+                    <Label text="Xác nhận mật khẩu" styleClass="label-field"/>
+                    <PasswordField fx:id="txtRegConfirmPassword" promptText="nhập lại mật khẩu..."
+                                   onAction="#onRegister" styleClass="input-field"/>
+                </VBox>
+
+                <Button fx:id="btnRegister" text="Tạo tài khoản mới" onAction="#onRegister"
+                        maxWidth="Infinity" prefHeight="42" styleClass="btn-primary">
+                    <VBox.margin>
+                        <Insets top="8"/>
+                    </VBox.margin>
+                </Button>
+            </VBox>
+        </StackPane>
+
+        <!-- Error/Status Label -->
+        <Label fx:id="lblStatus" wrapText="true" styleClass="status-msg"/>
     </VBox>
 </StackPane>

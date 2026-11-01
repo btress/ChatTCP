@@ -5,67 +5,208 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
 <?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.TextArea?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.Tooltip?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 
-<BorderPane xmlns="http://javafx.com/javafx"
-            xmlns:fx="http://javafx.com/fxml"
-            fx:controller="org.example.ungdungchat.ChatController"
-            prefWidth="920" prefHeight="640"
-            stylesheets="@style.css">
+<BorderPane fx:id="rootPane" prefHeight="720" prefWidth="1100" styleClass="main-root" stylesheets="@style.css" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.ungdungchat.ChatController">
 
-    <!-- ===== Thanh tiêu đề ===== -->
-    <top>
-        <HBox spacing="10" alignment="CENTER_LEFT" styleClass="thanh-tieu-de">
-            <padding>
-                <Insets top="14" right="18" bottom="14" left="18"/>
-            </padding>
-            <Label fx:id="lblTieuDe" text="Phòng chat chung" styleClass="tieu-de-phong"/>
-            <Region HBox.hgrow="ALWAYS"/>
-            <Label fx:id="lblTen" text="Bạn:" styleClass="ten-toi"/>
-        </HBox>
-    </top>
+    <!-- ========================================================================= -->
+    <!-- COLUMN 1: NAVIGATION SIDEBAR -->
+    <!-- ========================================================================= -->
+    <left>
+        <HBox>
+            <VBox alignment="TOP_CENTER" prefWidth="72" spacing="16" styleClass="nav-sidebar">
+                <padding>
+                    <Insets bottom="18" left="8" right="8" top="18" />
+                </padding>
 
-    <!-- ===== Khung tin nhắn ===== -->
-    <center>
-        <ScrollPane fx:id="scrollPane" fitToWidth="true" styleClass="vung-chat">
-            <content>
-                <VBox fx:id="khungTinNhan" spacing="8">
-                    <padding>
-                        <Insets top="16" right="16" bottom="16" left="16"/>
-                    </padding>
+                <!-- Current User Avatar Profile Button -->
+                <Button fx:id="btnMyProfile" onAction="#onOpenProfile" styleClass="nav-avatar-btn">
+                    <graphic>
+                        <StackPane>
+                            <Label fx:id="lblMyAvatarInitial" styleClass="avatar-circle-nav" text="U" />
+                            <Region styleClass="online-dot-nav" StackPane.alignment="BOTTOM_RIGHT" />
+                        </StackPane>
+                    </graphic>
+                    <tooltip><Tooltip text="Xem trang cá nhân và Cài đặt" /></tooltip>
+                </Button>
+
+                <Separator styleClass="nav-separator" />
+
+                <!-- Navigation Action Tabs -->
+                <VBox alignment="TOP_CENTER" spacing="8" VBox.vgrow="ALWAYS">
+                    <Button fx:id="navBtnChats" onAction="#onNavChats" styleClass="nav-btn, nav-btn-active" text="💬">
+                        <tooltip><Tooltip text="Đoạn chat" /></tooltip>
+                    </Button>
+                    <Button fx:id="navBtnFriends" onAction="#onNavFriends" styleClass="nav-btn" text="👥">
+                        <tooltip><Tooltip text="Bạn bè và Danh bạ" /></tooltip>
+                    </Button>
+                    <Button fx:id="navBtnRequests" onAction="#onNavRequests" styleClass="nav-btn" text="📩">
+                        <tooltip><Tooltip text="Lời mời kết bạn" /></tooltip>
+                    </Button>
+                    <Button fx:id="navBtnAdmin" onAction="#onNavAdmin" styleClass="nav-btn" text="📊">
+                        <tooltip><Tooltip text="Bảng quản trị Server" /></tooltip>
+                    </Button>
                 </VBox>
-            </content>
-        </ScrollPane>
-    </center>
 
-    <!-- ===== Danh sách người online ===== -->
-    <right>
-        <VBox spacing="6" prefWidth="190" styleClass="cot-phai">
-            <padding>
-                <Insets top="12" right="10" bottom="12" left="10"/>
-            </padding>
-            <Label text="Đang online" styleClass="nhan-cot"/>
-            <ListView fx:id="danhSachOnline" VBox.vgrow="ALWAYS"/>
-        </VBox>
-    </right>
+                <!-- Bottom Sidebar Controls -->
+                <VBox alignment="BOTTOM_CENTER" spacing="10">
+                    <Button fx:id="btnThemeToggle" onAction="#onToggleTheme" styleClass="nav-btn" text="🌙">
+                        <tooltip><Tooltip text="Chuyển chế độ Sáng / Tối" /></tooltip>
+                    </Button>
+                    <Button onAction="#onLogout" styleClass="nav-btn, nav-btn-logout" text="🚪">
+                        <tooltip><Tooltip text="Đăng xuất" /></tooltip>
+                    </Button>
+                </VBox>
+            </VBox>
 
-    <!-- ===== Thanh nhập tin nhắn ===== -->
-    <bottom>
-        <HBox spacing="8" alignment="CENTER" styleClass="thanh-nhap">
-            <padding>
-                <Insets top="10" right="14" bottom="12" left="14"/>
-            </padding>
-            <Button text="📎  Gửi file" onAction="#onGuiFile"
-                    prefHeight="38" styleClass="nut-phu"/>
-            <TextField fx:id="oNhap" promptText="Nhập tin nhắn..."
-                       onAction="#onGuiTinNhan" prefHeight="38"
-                       HBox.hgrow="ALWAYS" styleClass="o-tin-nhan"/>
-            <Button text="Gửi" onAction="#onGuiTinNhan"
-                    prefWidth="76" prefHeight="38" styleClass="nut-gui"/>
+            <!-- ========================================================================= -->
+            <!-- COLUMN 2: CONVERSATIONS / MASTER LIST -->
+            <!-- ========================================================================= -->
+            <VBox prefWidth="320" spacing="12" styleClass="conv-sidebar">
+                <padding>
+                    <Insets bottom="12" left="14" right="14" top="16" />
+                </padding>
+
+                <!-- Header Title & New Chat Action -->
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label fx:id="lblMasterTitle" styleClass="conv-header-title" text="Đoạn chat" HBox.hgrow="ALWAYS" />
+                    <Region HBox.hgrow="ALWAYS" />
+                    <Button onAction="#onOpenNewChatModal" styleClass="btn-icon-action" text="➕">
+                        <tooltip><Tooltip text="Tạo nhóm hoặc nhắn tin mới" /></tooltip>
+                    </Button>
+                </HBox>
+
+                <!-- Search Input Bar -->
+                <HBox alignment="CENTER_LEFT" styleClass="search-box">
+                    <Label styleClass="search-icon" text="🔍" />
+                    <TextField fx:id="txtSearch" promptText="Tìm kiếm đoạn chat hoặc người dùng..." styleClass="search-input" HBox.hgrow="ALWAYS" />
+                </HBox>
+
+                <!-- Filter Chips -->
+                <HBox spacing="6">
+                    <Button fx:id="filterAll" onAction="#onFilterAll" styleClass="filter-chip, filter-active" text="Tất cả" />
+                    <Button fx:id="filterUnread" onAction="#onFilterUnread" styleClass="filter-chip" text="Chưa đọc" />
+                    <Button fx:id="filterGroups" onAction="#onFilterGroups" styleClass="filter-chip" text="Nhóm" />
+                </HBox>
+
+                <!-- Conversation Scrollable List -->
+                <ListView fx:id="listConversations" styleClass="conv-list" VBox.vgrow="ALWAYS" />
+            </VBox>
         </HBox>
-    </bottom>
+    </left>
+
+    <!-- ========================================================================= -->
+    <!-- COLUMN 3: MAIN CHAT WINDOW -->
+    <!-- ========================================================================= -->
+    <center>
+        <BorderPane fx:id="chatPane" styleClass="chat-main-area">
+
+            <!-- Chat Top Header -->
+            <top>
+                <HBox alignment="CENTER_LEFT" spacing="14" styleClass="chat-header">
+                    <padding>
+                        <Insets bottom="12" left="20" right="20" top="12" />
+                    </padding>
+
+                    <!-- Avatar with Online Dot -->
+                    <StackPane>
+                        <Label fx:id="lblChatHeaderAvatar" styleClass="avatar-circle-header" text="C" />
+                        <Region fx:id="dotChatHeaderOnline" styleClass="online-dot-header" StackPane.alignment="BOTTOM_RIGHT" />
+                    </StackPane>
+
+                    <!-- Title & Subtitle -->
+                    <VBox spacing="2" HBox.hgrow="ALWAYS">
+                        <Label fx:id="lblChatHeaderTitle" styleClass="chat-header-title" text="Phòng Chat Chung" />
+                        <Label fx:id="lblChatHeaderStatus" styleClass="chat-header-status" text="Đang hoạt động" />
+                    </VBox>
+
+                    <!-- Call & Info Actions -->
+                    <HBox alignment="CENTER_RIGHT" spacing="8">
+                        <Button fx:id="btnVoiceCall" onAction="#onStartVoiceCall" styleClass="btn-header-action" text="📞">
+                            <tooltip><Tooltip text="Bắt đầu cuộc gọi thoại" /></tooltip>
+                        </Button>
+                        <Button onAction="#onToggleConversationInfo" styleClass="btn-header-action" text="ℹ">
+                            <tooltip><Tooltip text="Thông tin cuộc trò chuyện" /></tooltip>
+                        </Button>
+                    </HBox>
+                </HBox>
+            </top>
+
+            <!-- Message Area ScrollPane -->
+            <center>
+                <ScrollPane fx:id="scrollMessages" fitToWidth="true" styleClass="messages-scroll">
+                    <content>
+                        <VBox fx:id="boxMessages" spacing="10">
+                            <padding>
+                                <Insets bottom="16" left="20" right="20" top="16" />
+                            </padding>
+
+                            <!-- Load More Button -->
+                            <HBox alignment="CENTER">
+                                <Button fx:id="btnLoadMore" onAction="#onLoadMoreMessages" styleClass="btn-load-more" text="▲ Tải tin nhắn cũ hơn" />
+                            </HBox>
+                        </VBox>
+                    </content>
+                </ScrollPane>
+            </center>
+
+            <!-- Bottom Composer -->
+            <bottom>
+                <VBox spacing="4" styleClass="composer-container">
+                    <padding>
+                        <Insets bottom="12" left="16" right="16" top="6" />
+                    </padding>
+
+                    <!-- Typing Indicator Banner -->
+                    <Label fx:id="lblTypingIndicator" managed="false" styleClass="typing-indicator" text="" visible="false" />
+
+                    <!-- Reply Preview Bar -->
+                    <HBox fx:id="barReplyPreview" alignment="CENTER_LEFT" managed="false" spacing="8" styleClass="reply-preview-bar" visible="false">
+                        <Label styleClass="reply-preview-title" text="↩ Đang trả lời:" />
+                        <Label fx:id="lblReplyTargetText" styleClass="reply-preview-text" text="" HBox.hgrow="ALWAYS" />
+                        <Button onAction="#onCancelReply" styleClass="btn-close-reply" text="✕" />
+                    </HBox>
+
+                    <!-- Main Composer Controls -->
+                    <HBox alignment="CENTER" spacing="8">
+                        <!-- Emoji Picker Button -->
+                        <Button onAction="#onOpenEmojiPicker" styleClass="btn-composer-icon" text="😊">
+                            <tooltip><Tooltip text="Chọn biểu tượng cảm xúc" /></tooltip>
+                        </Button>
+
+                        <!-- Attach Image Button -->
+                        <Button onAction="#onAttachImage" styleClass="btn-composer-icon" text="🖼️">
+                            <tooltip><Tooltip text="Gửi ảnh" /></tooltip>
+                        </Button>
+
+                        <!-- Attach File Button -->
+                        <Button onAction="#onAttachFile" styleClass="btn-composer-icon" text="📎">
+                            <tooltip><Tooltip text="Gửi tệp đính kèm" /></tooltip>
+                        </Button>
+
+                        <!-- Voice Message Button -->
+                        <Button fx:id="btnVoiceRecord" onAction="#onToggleVoiceRecording" styleClass="btn-composer-icon" text="🎙️">
+                            <tooltip><Tooltip text="Ghi âm tin nhắn thoại" /></tooltip>
+                        </Button>
+
+                        <!-- Message TextArea -->
+                        <TextArea fx:id="txtComposer" maxHeight="100" prefRowCount="1" promptText="Nhập tin nhắn... (Enter gửi, Shift+Enter xuống dòng)" styleClass="composer-textarea" wrapText="true" HBox.hgrow="ALWAYS" />
+
+                        <!-- Send Button -->
+                        <Button fx:id="btnSend" onAction="#onSendMessage" styleClass="btn-composer-send" text="➤">
+                            <tooltip><Tooltip text="Gửi tin nhắn" /></tooltip>
+                        </Button>
+                    </HBox>
+                </VBox>
+            </bottom>
+        </BorderPane>
+    </center>
 </BorderPane>
